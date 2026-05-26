@@ -14,16 +14,22 @@ import {
 import {
   AlertTriangle,
   BookOpen,
+  Brain,
   CheckCircle2,
   ClipboardCheck,
+  Database,
   FileText,
   GitBranch,
+  GraduationCap,
+  Home,
   Layers3,
+  ListChecks,
   Network,
   Play,
   RefreshCw,
   Save,
   Search,
+  Settings,
   Settings2,
   Table2,
   Upload,
@@ -149,6 +155,17 @@ const tabs: Array<{ id: WorkspaceTab; label: string; icon: ReactNode }> = [
   { id: 'review', label: 'Review', icon: <ClipboardCheck size={15} /> },
 ];
 
+const platformNav = [
+  { label: 'Dashboard', icon: <Home size={16} /> },
+  { label: 'Course Ingestion', icon: <Upload size={16} />, active: true },
+  { label: 'Knowledge Graph', icon: <Network size={16} /> },
+  { label: 'Exercise Bank', icon: <Database size={16} /> },
+  { label: 'Recommendation', icon: <Brain size={16} /> },
+  { label: 'Students', icon: <GraduationCap size={16} /> },
+  { label: 'Review Queue', icon: <ListChecks size={16} /> },
+  { label: 'Settings', icon: <Settings size={16} /> },
+];
+
 const nodeTypes = {
   courseNode: CourseNode,
 };
@@ -258,8 +275,35 @@ function App() {
   }, []);
 
   return (
-    <main className="platform-shell">
-      <header className="app-chrome">
+    <main className="app-root">
+      <aside className="global-sidebar">
+        <div className="platform-brand">
+          <div className="platform-mark">
+            <GitBranch size={20} />
+          </div>
+          <div>
+            <strong>AI Tutor</strong>
+            <span>Platform</span>
+          </div>
+        </div>
+
+        <nav className="platform-nav">
+          {platformNav.map((item) => (
+            <button className={item.active ? 'active' : ''} key={item.label}>
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <span>Current workspace</span>
+          <strong>{preview?.sourceId ?? 'draft-source'}</strong>
+        </div>
+      </aside>
+
+      <section className="module-shell">
+        <header className="app-chrome">
         <div className="brand">
           <div className="brand-mark">
             <GitBranch size={20} />
@@ -358,6 +402,7 @@ function App() {
           <Inspector selectedItem={selectedItem} relatedProblems={selectedNodeProblems} />
           <IssuePanel issues={preview?.issues ?? []} />
         </aside>
+      </section>
       </section>
     </main>
   );

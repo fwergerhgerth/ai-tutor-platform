@@ -26,7 +26,102 @@ button {
   border: 0;
 }
 
-.platform-shell {
+.app-root {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  background: #f6f7f8;
+}
+
+.global-sidebar {
+  min-height: 100vh;
+  padding: 14px 12px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 18px;
+  color: #e5e7eb;
+  background: #111827;
+}
+
+.platform-brand {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.platform-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #bfdbfe;
+  background: rgba(37, 99, 235, 0.24);
+}
+
+.platform-brand strong {
+  display: block;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.platform-brand span,
+.sidebar-footer span {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.platform-nav {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.platform-nav button {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #cbd5e1;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.platform-nav button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.platform-nav button.active {
+  color: #ffffff;
+  background: #2563eb;
+}
+
+.sidebar-footer {
+  min-height: 68px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-footer strong {
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.module-shell {
+  min-width: 0;
   min-height: 100vh;
   padding: 14px;
   display: grid;
@@ -881,6 +976,28 @@ dd {
 }
 
 @media (max-width: 1180px) {
+  .app-root {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .global-sidebar {
+    padding: 12px 8px;
+  }
+
+  .platform-brand div:last-child,
+  .platform-nav button {
+    font-size: 0;
+  }
+
+  .platform-nav button {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-footer {
+    display: none;
+  }
+
   .app-chrome {
     grid-template-columns: 1fr;
   }
@@ -907,7 +1024,32 @@ dd {
 }
 
 @media (max-width: 840px) {
-  .platform-shell {
+  .app-root {
+    grid-template-columns: 1fr;
+  }
+
+  .global-sidebar {
+    min-height: auto;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .platform-brand div:last-child {
+    display: block;
+  }
+
+  .platform-nav {
+    display: flex;
+    min-width: max-content;
+  }
+
+  .platform-nav button {
+    width: 38px;
+    flex: 0 0 auto;
+  }
+
+  .module-shell {
     padding: 10px;
   }
 
