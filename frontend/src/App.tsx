@@ -13,16 +13,19 @@ import {
 } from '@xyflow/react';
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
+  ClipboardCheck,
   FileText,
   GitBranch,
-  GitFork,
   Layers3,
+  Network,
   Play,
   RefreshCw,
   Save,
   Search,
   Settings2,
+  Table2,
   Upload,
 } from 'lucide-react';
 
@@ -95,13 +98,14 @@ type GraphNodeData = {
   kind: 'book' | 'chapter' | 'section' | 'exercise';
   subtitle: string;
   page?: number;
-  issueCount?: number;
 };
 
 type SelectedItem =
   | { type: 'node'; node: Node<GraphNodeData> }
   | { type: 'edge'; edge: Edge }
   | null;
+
+type WorkspaceTab = 'import' | 'structure' | 'graph' | 'review';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
 
@@ -138,11 +142,19 @@ const samplePages: PageText[] = [
   },
 ];
 
+const tabs: Array<{ id: WorkspaceTab; label: string; icon: ReactNode }> = [
+  { id: 'import', label: 'Import', icon: <Upload size={15} /> },
+  { id: 'structure', label: 'Structure', icon: <BookOpen size={15} /> },
+  { id: 'graph', label: 'Graph', icon: <Network size={15} /> },
+  { id: 'review', label: 'Review', icon: <ClipboardCheck size={15} /> },
+];
+
 const nodeTypes = {
   courseNode: CourseNode,
 };
 
 function App() {
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('graph');
   const [profileText, setProfileText] = useState(JSON.stringify(sampleProfile, null, 2));
   const [pagesText, setPagesText] = useState(JSON.stringify(samplePages, null, 2));
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -159,13 +171,6 @@ function App() {
     return map;
   }, [preview]);
 
-  const selectedNodeProblems = useMemo(() => {
-    if (selectedItem?.type !== 'node' || !preview) {
-      return [];
-    }
-    return preview.problems.filter((problem) => problem.labelIds.includes(selectedItem.node.id));
-  }, [preview, selectedItem]);
-
   const filteredProblems = useMemo(() => {
     if (!preview) {
       return [];
@@ -181,6 +186,13 @@ function App() {
       return `${problem.number} ${problem.content} ${labels}`.toLowerCase().includes(normalized);
     });
   }, [preview, query, taxonomyById]);
+
+  const selectedNodeProblems = useMemo(() => {
+    if (selectedItem?.type !== 'node' || !preview) {
+      return [];
+    }
+    return preview.problems.filter((problem) => problem.labelIds.includes(selectedItem.node.id));
+  }, [preview, selectedItem]);
 
   useEffect(() => {
     void runPreview();
@@ -246,34 +258,43 @@ function App() {
   }, []);
 
   return (
-    <main className="workbench">
-      <header className="toolbar">
-        <div className="brand-block">
-          <div className="brand-icon">
+    <main className="platform-shell">
+      <header className="app-chrome">
+        <div className="brand">
+          <div className="brand-mark">
             <GitBranch size={20} />
           </div>
           <div>
-            <p>AI Tutor Platform</p>
-            <h1>Course Graph Workbench</h1>
+            <span>AI Tutor Platform</span>
+            <strong>{preview?.title ?? 'Course ingestion workspace'}</strong>
           </div>
         </div>
 
-        <div className="toolbar-actions">
-          <button className="ghost-button" onClick={loadSample}>
-            <RefreshCw size={16} />
+        <nav className="workspace-tabs">
+          {tabs.map((tab) => (
+            <button className={activeTab === tab.id ? 'active' : ''} key={tab.id} onClick={() => setActiveTab(tab.id)}>
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="chrome-actions">
+          <button className="secondary-action" onClick={loadSample}>
+            <RefreshCw size={15} />
             样例
           </button>
-          <button className="ghost-button">
-            <Upload size={16} />
-            上传 PDF
+          <button className="secondary-action">
+            <Upload size={15} />
+            上传
           </button>
           <button onClick={runPreview} disabled={loading}>
-            <Play size={16} />
-            {loading ? '解析中' : '运行解析'}
+            <Play size={15} />
+            {loading ? '解析中' : '解析'}
           </button>
-          <button className="dark-button">
-            <Save size={16} />
-            保存草稿
+          <button className="primary-dark">
+            <Save size={15} />
+            保存
           </button>
         </div>
       </header>
@@ -285,156 +306,303 @@ function App() {
         </div>
       )}
 
-      <section className="summary-strip">
-        <Metric icon={<FileText size={16} />} label="页数" value={preview?.metrics.pageCount ?? 0} />
-        <Metric icon={<Layers3 size={16} />} label="结构节点" value={preview?.metrics.taxonomyCount ?? 0} />
-        <Metric icon={<GitFork size={16} />} label="题目" value={preview?.metrics.problemCount ?? 0} />
-        <Metric icon={<AlertTriangle size={16} />} label="待复核" value={preview?.metrics.issueCount ?? 0} />
-      </section>
-
-      <section className="main-grid">
-        <aside className="left-rail">
-          <PanelHeader title="资料结构" caption={preview?.sourceId ?? '未解析'} />
-          <div className="source-title">
-            <strong>{preview?.title ?? sampleProfile.title}</strong>
-            <span>{preview ? `${preview.taxonomy.length} 个结构节点` : '等待解析'}</span>
-          </div>
-
-          <div className="outline-list">
-            {preview?.taxonomy.map((node) => (
-              <button
-                className={`outline-row ${node.kind}`}
-                key={node.id}
-                onClick={() => {
-                  const graphNode = nodes.find((item) => item.id === node.id);
-                  if (graphNode) {
-                    setSelectedItem({ type: 'node', node: graphNode });
-                  }
-                }}
-              >
-                <span>{node.kind}</span>
-                <strong>{node.title}</strong>
-                <small>p.{node.page}</small>
-              </button>
-            ))}
-          </div>
-
-          <details className="config-drawer">
-            <summary>
-              <Settings2 size={15} />
-              Source Profile
-            </summary>
-            <textarea value={profileText} onChange={(event) => setProfileText(event.target.value)} />
-          </details>
-
-          <details className="config-drawer">
-            <summary>
-              <FileText size={15} />
-              PDF Text Pages
-            </summary>
-            <textarea value={pagesText} onChange={(event) => setPagesText(event.target.value)} />
-          </details>
+      <section className="workspace-grid">
+        <aside className="navigation-pane">
+          <PanelHeader title="Workspace" caption={preview?.sourceId ?? 'draft'} />
+          <DocumentSummary preview={preview} />
+          <SourceOutline
+            nodes={nodes}
+            preview={preview}
+            onSelect={(node) => setSelectedItem({ type: 'node', node })}
+          />
         </aside>
 
-        <section className="canvas-pane">
-          <div className="canvas-header">
-            <PanelHeader title="课程结构图" caption="Book / Chapter / Section / Exercise" />
-            <div className="canvas-tools">
-              <button className="ghost-button compact">
-                <GitBranch size={15} />
-                自动布局
-              </button>
-              <button className="ghost-button compact">
-                <CheckCircle2 size={15} />
-                仅看待确认
-              </button>
-            </div>
-          </div>
-          <div className="flow-shell">
-            <ReactFlow
+        <section className="content-pane">
+          {activeTab === 'import' && (
+            <ImportView
+              preview={preview}
+              profileText={profileText}
+              pagesText={pagesText}
+              onProfileChange={setProfileText}
+              onPagesChange={setPagesText}
+            />
+          )}
+
+          {activeTab === 'structure' && (
+            <StructureView
+              preview={preview}
               nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.2 }}
-              onNodeClick={selectNode}
-              onEdgeClick={selectEdge}
-              onPaneClick={() => setSelectedItem(null)}
-              nodesDraggable
-            >
-              <Background gap={22} size={1} />
-              <Controls position="bottom-right" />
-              <MiniMap pannable zoomable nodeStrokeWidth={3} />
-            </ReactFlow>
-          </div>
+              onSelect={(node) => setSelectedItem({ type: 'node', node })}
+            />
+          )}
+
+          {activeTab === 'graph' && (
+            <GraphView nodes={nodes} edges={edges} onNodeClick={selectNode} onEdgeClick={selectEdge} />
+          )}
+
+          {activeTab === 'review' && (
+            <ReviewView
+              problems={filteredProblems}
+              total={preview?.problems.length ?? 0}
+              query={query}
+              taxonomyById={taxonomyById}
+              nodes={nodes}
+              onQueryChange={setQuery}
+              onSelect={(node) => setSelectedItem({ type: 'node', node })}
+            />
+          )}
         </section>
 
-        <aside className="right-rail">
-          <PanelHeader title="属性面板" caption="节点、边与证据" />
+        <aside className="inspector-pane">
+          <PanelHeader title="Inspector" caption="selection details" />
           <Inspector selectedItem={selectedItem} relatedProblems={selectedNodeProblems} />
-
-          <div className="issue-card">
-            <div className="issue-title">
-              <AlertTriangle size={15} />
-              质量检查
-            </div>
-            {preview?.issues.length ? (
-              preview.issues.map((issue, index) => (
-                <div className={`issue-row ${issue.severity}`} key={`${issue.code}-${index}`}>
-                  <strong>{issue.code}</strong>
-                  <p>{issue.message}</p>
-                  {issue.page ? <span>p.{issue.page}</span> : null}
-                </div>
-              ))
-            ) : (
-              <p className="empty-state">暂无解析问题</p>
-            )}
-          </div>
+          <IssuePanel issues={preview?.issues ?? []} />
         </aside>
       </section>
-
-      <section className="review-dock">
-        <div className="dock-header">
-          <PanelHeader title="题目挂接审核" caption={`${filteredProblems.length} / ${preview?.problems.length ?? 0} 道题`} />
-          <label className="search-box">
-            <Search size={15} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索题号、题面或标签" />
-          </label>
-        </div>
-
-        <div className="exercise-table">
-          <div className="table-head">
-            <span>题号</span>
-            <span>页码</span>
-            <span>题面</span>
-            <span>挂接节点</span>
-            <span>状态</span>
-          </div>
-          {filteredProblems.map((problem) => (
-            <button
-              className="table-row"
-              key={problem.id}
-              onClick={() => {
-                const graphNode = nodes.find((node) => node.id === problem.id);
-                if (graphNode) {
-                  setSelectedItem({ type: 'node', node: graphNode });
-                }
-              }}
-            >
-              <strong>{problem.number}</strong>
-              <span>p.{problem.page}</span>
-              <p>{problem.content}</p>
-              <div className="label-stack">
-                {problem.labelIds.map((labelId) => (
-                  <span key={labelId}>{taxonomyById.get(labelId)?.title ?? labelId}</span>
-                ))}
-              </div>
-              <em>已挂接</em>
-            </button>
-          ))}
-        </div>
-      </section>
     </main>
+  );
+}
+
+function DocumentSummary({ preview }: { preview: PreviewResponse | null }) {
+  return (
+    <div className="document-summary">
+      <strong>{preview?.title ?? sampleProfile.title}</strong>
+      <div className="summary-metrics">
+        <Metric icon={<FileText size={14} />} label="Pages" value={preview?.metrics.pageCount ?? 0} />
+        <Metric icon={<Layers3 size={14} />} label="Nodes" value={preview?.metrics.taxonomyCount ?? 0} />
+        <Metric icon={<Table2 size={14} />} label="Exercises" value={preview?.metrics.problemCount ?? 0} />
+        <Metric icon={<AlertTriangle size={14} />} label="Issues" value={preview?.metrics.issueCount ?? 0} />
+      </div>
+    </div>
+  );
+}
+
+function SourceOutline({
+  nodes,
+  preview,
+  onSelect,
+}: {
+  nodes: Node<GraphNodeData>[];
+  preview: PreviewResponse | null;
+  onSelect: (node: Node<GraphNodeData>) => void;
+}) {
+  return (
+    <div className="source-outline">
+      <div className="section-label">Outline</div>
+      {preview?.taxonomy.map((item) => (
+        <button
+          className={`outline-item ${item.kind}`}
+          key={item.id}
+          onClick={() => {
+            const graphNode = nodes.find((node) => node.id === item.id);
+            if (graphNode) onSelect(graphNode);
+          }}
+        >
+          <span>{item.kind}</span>
+          <strong>{item.title}</strong>
+          <small>p.{item.page}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ImportView({
+  preview,
+  profileText,
+  pagesText,
+  onProfileChange,
+  onPagesChange,
+}: {
+  preview: PreviewResponse | null;
+  profileText: string;
+  pagesText: string;
+  onProfileChange: (value: string) => void;
+  onPagesChange: (value: string) => void;
+}) {
+  return (
+    <div className="tab-view import-view">
+      <ViewHeader
+        icon={<Upload size={18} />}
+        title="Import source material"
+        caption="Upload a lecture PDF, parse text pages, and inspect source profile rules."
+      />
+
+      <div className="import-grid">
+        <div className="drop-zone">
+          <Upload size={26} />
+          <strong>Upload PDF</strong>
+          <p>PDF upload is the next adapter. This draft uses parsed page text to validate the workflow.</p>
+          <button>选择文件</button>
+        </div>
+
+        <div className="quality-panel">
+          <div className="section-label">Parse quality</div>
+          <QualityRow label="Text pages" value={preview?.metrics.pageCount ?? 0} />
+          <QualityRow label="Detected structure nodes" value={preview?.metrics.taxonomyCount ?? 0} />
+          <QualityRow label="Detected exercises" value={preview?.metrics.problemCount ?? 0} />
+          <QualityRow label="Review issues" value={preview?.metrics.issueCount ?? 0} />
+        </div>
+      </div>
+
+      <div className="config-grid">
+        <EditorPanel title="Source Profile" value={profileText} onChange={onProfileChange} />
+        <EditorPanel title="PDF Text Pages" value={pagesText} onChange={onPagesChange} />
+      </div>
+    </div>
+  );
+}
+
+function StructureView({
+  preview,
+  nodes,
+  onSelect,
+}: {
+  preview: PreviewResponse | null;
+  nodes: Node<GraphNodeData>[];
+  onSelect: (node: Node<GraphNodeData>) => void;
+}) {
+  const bySection = useMemo(() => {
+    const map = new Map<string, ProblemSpan[]>();
+    preview?.problems.forEach((problem) => {
+      const key = problem.sectionId || 'unassigned';
+      map.set(key, [...(map.get(key) ?? []), problem]);
+    });
+    return map;
+  }, [preview]);
+
+  return (
+    <div className="tab-view">
+      <ViewHeader
+        icon={<BookOpen size={18} />}
+        title="Course structure"
+        caption="Review the extracted chapter, section, and exercise hierarchy before graph editing."
+      />
+
+      <div className="structure-list">
+        {preview?.taxonomy.map((item) => (
+          <button
+            className={`structure-row ${item.kind}`}
+            key={item.id}
+            onClick={() => {
+              const graphNode = nodes.find((node) => node.id === item.id);
+              if (graphNode) onSelect(graphNode);
+            }}
+          >
+            <div>
+              <span>{item.kind}</span>
+              <strong>{item.title}</strong>
+              <small>{item.path.join(' / ')}</small>
+            </div>
+            <em>{bySection.get(item.id)?.length ?? 0} exercises</em>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GraphView({
+  nodes,
+  edges,
+  onNodeClick,
+  onEdgeClick,
+}: {
+  nodes: Node<GraphNodeData>[];
+  edges: Edge[];
+  onNodeClick: (_: unknown, node: Node<GraphNodeData>) => void;
+  onEdgeClick: (_: unknown, edge: Edge) => void;
+}) {
+  return (
+    <div className="tab-view graph-view">
+      <ViewHeader
+        icon={<Network size={18} />}
+        title="Course graph"
+        caption="Explore the generated draft graph. Drag nodes to adjust the local layout."
+      />
+
+      <div className="graph-stage">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.22 }}
+          onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
+          nodesDraggable
+        >
+          <Background gap={24} size={1} />
+          <Controls position="bottom-right" />
+          <MiniMap pannable zoomable nodeStrokeWidth={3} />
+        </ReactFlow>
+      </div>
+    </div>
+  );
+}
+
+function ReviewView({
+  problems,
+  total,
+  query,
+  taxonomyById,
+  nodes,
+  onQueryChange,
+  onSelect,
+}: {
+  problems: ProblemSpan[];
+  total: number;
+  query: string;
+  taxonomyById: Map<string, TaxonomyNode>;
+  nodes: Node<GraphNodeData>[];
+  onQueryChange: (value: string) => void;
+  onSelect: (node: Node<GraphNodeData>) => void;
+}) {
+  return (
+    <div className="tab-view review-view">
+      <ViewHeader
+        icon={<ClipboardCheck size={18} />}
+        title="Exercise attachment review"
+        caption="Check which course nodes each exercise is attached to."
+      >
+        <label className="search-box">
+          <Search size={15} />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search exercises" />
+        </label>
+      </ViewHeader>
+
+      <div className="review-count">{problems.length} / {total} exercises</div>
+
+      <div className="review-table">
+        <div className="table-head">
+          <span>No.</span>
+          <span>Page</span>
+          <span>Problem text</span>
+          <span>Attached nodes</span>
+          <span>Status</span>
+        </div>
+        {problems.map((problem) => (
+          <button
+            className="table-row"
+            key={problem.id}
+            onClick={() => {
+              const graphNode = nodes.find((node) => node.id === problem.id);
+              if (graphNode) onSelect(graphNode);
+            }}
+          >
+            <strong>{problem.number}</strong>
+            <span>p.{problem.page}</span>
+            <p>{problem.content}</p>
+            <div className="label-stack">
+              {problem.labelIds.map((labelId) => (
+                <span key={labelId}>{taxonomyById.get(labelId)?.title ?? labelId}</span>
+              ))}
+            </div>
+            <em>linked</em>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -442,10 +610,13 @@ function CourseNode({ data, selected }: NodeProps<Node<GraphNodeData>>) {
   return (
     <div className={`course-node ${data.kind} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
-      <div className="node-kind">{data.kind}</div>
+      <div className="node-meta">
+        <span />
+        {data.kind}
+      </div>
       <strong>{data.title}</strong>
-      <span>{data.subtitle}</span>
-      {data.page ? <small>p.{data.page}</small> : null}
+      <small>{data.subtitle}</small>
+      {data.page ? <em>p.{data.page}</em> : null}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -453,8 +624,8 @@ function CourseNode({ data, selected }: NodeProps<Node<GraphNodeData>>) {
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
-    <div className="metric-card">
-      <div>{icon}</div>
+    <div className="metric">
+      {icon}
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -470,6 +641,60 @@ function PanelHeader({ title, caption }: { title: string; caption: string }) {
   );
 }
 
+function ViewHeader({
+  icon,
+  title,
+  caption,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  caption: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="view-header">
+      <div className="view-title">
+        <div>{icon}</div>
+        <section>
+          <h1>{title}</h1>
+          <p>{caption}</p>
+        </section>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function QualityRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="quality-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function EditorPanel({
+  title,
+  value,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="editor-panel">
+      <div className="editor-title">
+        <Settings2 size={15} />
+        {title}
+      </div>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} spellCheck={false} />
+    </div>
+  );
+}
+
 function Inspector({
   selectedItem,
   relatedProblems,
@@ -478,7 +703,7 @@ function Inspector({
   relatedProblems: ProblemSpan[];
 }) {
   if (!selectedItem) {
-    return <p className="empty-state">选择一个节点或关系查看详情</p>;
+    return <p className="empty-state">Select a node or edge to inspect its source, links, and review status.</p>;
   }
 
   if (selectedItem.type === 'edge') {
@@ -520,6 +745,28 @@ function Inspector({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function IssuePanel({ issues }: { issues: QualityIssue[] }) {
+  return (
+    <div className="issue-card">
+      <div className="issue-title">
+        <AlertTriangle size={15} />
+        Quality
+      </div>
+      {issues.length ? (
+        issues.map((issue, index) => (
+          <div className={`issue-row ${issue.severity}`} key={`${issue.code}-${index}`}>
+            <strong>{issue.code}</strong>
+            <p>{issue.message}</p>
+            {issue.page ? <span>p.{issue.page}</span> : null}
+          </div>
+        ))
+      ) : (
+        <p className="empty-state">No issues detected.</p>
+      )}
     </div>
   );
 }
@@ -598,7 +845,7 @@ function buildGraph(preview: PreviewResponse): { nodes: Node<GraphNodeData>[]; e
 
   preview.problems.forEach((problem) => {
     edges.push({
-      id: `${problem.id}->${problem.sectionId || preview.sourceId}`,
+      id: `${problem.sectionId || preview.sourceId}->${problem.id}`,
       source: problem.sectionId || preview.sourceId,
       target: problem.id,
       label: 'LOCATED_IN',
