@@ -6,3 +6,4 @@ frontend/vite.config.d.ts
 frontend/vite.config.js
 .DS_Store
 *.log
+__pycache__/
