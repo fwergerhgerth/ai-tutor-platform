@@ -99,6 +99,17 @@ type PreviewResponse = {
   };
 };
 
+type ExtractionSummary = {
+  extractor: string;
+  mode: 'text' | 'ocr' | 'hybrid' | string;
+  pageCount: number;
+  textPages: number;
+  ocrPages: number;
+  blankPages: number;
+  ocrLanguage?: string;
+  warnings: string[];
+};
+
 type GraphNodeData = {
   title: string;
   kind: 'book' | 'chapter' | 'section' | 'exercise';
@@ -178,6 +189,7 @@ function App() {
   const [nodes, setNodes] = useState<Node<GraphNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null);
+  const [extraction, setExtraction] = useState<ExtractionSummary | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -226,6 +238,7 @@ function App() {
       const payload = await response.json();
       setProfileText(JSON.stringify(payload.request.profile, null, 2));
       setPagesText(JSON.stringify(payload.request.pages, null, 2));
+      setExtraction(null);
       applyPreview(payload.response);
     } catch (err) {
       setProfileText(JSON.stringify(sampleProfile, null, 2));
@@ -257,10 +270,6 @@ function App() {
 
     try {
       if (lowerName.endsWith('.pdf')) {
-        const pages = await extractPdfTextPages(file);
-        if (pages.length === 0 || pages.every((page) => page.text.trim() === '')) {
-          throw new Error('这个 PDF 没有可读取的文字层，后续需要 OCR adapter。');
-        }
         const currentProfile = JSON.parse(profileText) as SourceProfile;
         const sourceTitle = file.name.replace(/\.pdf$/i, '');
         const nextProfile = {
@@ -268,12 +277,21 @@ function App() {
           sourceId: slugifySourceID(sourceTitle),
           title: sourceTitle,
         };
-        setProfileText(JSON.stringify(nextProfile, null, 2));
-        setPagesText(JSON.stringify(pages, null, 2));
-        await previewRequest({
-          profile: nextProfile,
-          pages,
+        const form = new FormData();
+        form.append('file', file);
+        form.append('profile', JSON.stringify(nextProfile));
+        const response = await fetch(`${API_BASE}/api/ingestion/pdf`, {
+          method: 'POST',
+          body: form,
         });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        }
+        setProfileText(JSON.stringify(nextProfile, null, 2));
+        setPagesText(JSON.stringify(payload.pages, null, 2));
+        setExtraction(payload.extraction);
+        applyPreview(payload.preview);
         return;
       }
 
@@ -290,12 +308,14 @@ function App() {
           if (payload.pages) {
             setPagesText(JSON.stringify(nextPages, null, 2));
           }
+          setExtraction(null);
           await previewRequest({ profile: nextProfile, pages: nextPages });
           return;
         }
         if (Array.isArray(payload)) {
           const nextPages = payload as PageText[];
           setPagesText(JSON.stringify(nextPages, null, 2));
+          setExtraction(null);
           await previewRequest({
             profile: JSON.parse(profileText) as SourceProfile,
             pages: nextPages,
@@ -307,6 +327,7 @@ function App() {
 
       const pages = [{ page: 1, text }];
       setPagesText(JSON.stringify(pages, null, 2));
+      setExtraction(null);
       await previewRequest({
         profile: JSON.parse(profileText) as SourceProfile,
         pages,
@@ -470,6 +491,7 @@ function App() {
           {activeTab === 'import' && (
             <ImportView
               preview={preview}
+              extraction={extraction}
               profileText={profileText}
               pagesText={pagesText}
               onProfileChange={setProfileText}
@@ -560,6 +582,7 @@ function SourceOutline({
 
 function ImportView({
   preview,
+  extraction,
   profileText,
   pagesText,
   onProfileChange,
@@ -567,6 +590,7 @@ function ImportView({
   onUpload,
 }: {
   preview: PreviewResponse | null;
+  extraction: ExtractionSummary | null;
   profileText: string;
   pagesText: string;
   onProfileChange: (value: string) => void;
@@ -585,7 +609,7 @@ function ImportView({
         <div className="drop-zone">
           <Upload size={26} />
           <strong>Import source file</strong>
-          <p>支持有文字层的 PDF、PreviewRequest JSON、PageText JSON、TXT/Markdown 文本。</p>
+          <p>支持 PDF、PreviewRequest JSON、PageText JSON、TXT/Markdown 文本。扫描 PDF 会自动尝试中文 OCR。</p>
           <button onClick={onUpload}>选择文件</button>
         </div>
 
@@ -595,6 +619,15 @@ function ImportView({
           <QualityRow label="Detected structure nodes" value={preview?.metrics.taxonomyCount ?? 0} />
           <QualityRow label="Detected exercises" value={preview?.metrics.problemCount ?? 0} />
           <QualityRow label="Review issues" value={preview?.metrics.issueCount ?? 0} />
+          {extraction && (
+            <div className="extraction-path">
+              <span>Extraction path</span>
+              <strong>{extraction.mode.toUpperCase()}</strong>
+              <p>
+                {extraction.extractor} · text {extraction.textPages} · OCR {extraction.ocrPages}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1012,48 +1045,6 @@ function buildGraph(preview: PreviewResponse): { nodes: Node<GraphNodeData>[]; e
 
 function messageOf(err: unknown) {
   return err instanceof Error ? err.message : String(err);
-}
-
-async function extractPdfTextPages(file: File): Promise<PageText[]> {
-  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
-  GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
-  const data = await file.arrayBuffer();
-  const document = await getDocument({ data }).promise;
-  const pages: PageText[] = [];
-
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const lines = new Map<number, Array<{ x: number; text: string }>>();
-
-    textContent.items.forEach((item) => {
-      if (!('str' in item) || !item.str.trim() || !('transform' in item)) {
-        return;
-      }
-      const transform = item.transform as number[];
-      const y = Math.round(transform[5]);
-      const x = transform[4] ?? 0;
-      lines.set(y, [...(lines.get(y) ?? []), { x, text: item.str }]);
-    });
-
-    const text = [...lines.entries()]
-      .sort((a, b) => b[0] - a[0])
-      .map(([, parts]) =>
-        parts
-          .sort((a, b) => a.x - b.x)
-          .map((part) => part.text)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim(),
-      )
-      .filter(Boolean)
-      .join('\n');
-
-    pages.push({ page: pageNumber, text });
-  }
-
-  await document.destroy();
-  return pages;
 }
 
 function slugifySourceID(title: string) {

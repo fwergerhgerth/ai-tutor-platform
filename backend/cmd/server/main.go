@@ -2,20 +2,29 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"ai-tutor-platform/backend/internal/ingestion"
 )
 
 func main() {
+	extractor := ingestion.PDFExtractor{
+		PythonBin:  env("PDF_PYTHON_BIN", "/opt/homebrew/bin/python3"),
+		ScriptPath: env("PDF_EXTRACT_SCRIPT", "scripts/extract_pdf_pages.py"),
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", healthHandler)
 	mux.HandleFunc("GET /api/modules", modulesHandler)
 	mux.HandleFunc("GET /api/ingestion/sample", sampleHandler)
 	mux.HandleFunc("POST /api/ingestion/preview", previewHandler)
+	mux.HandleFunc("POST /api/ingestion/pdf", pdfHandler(extractor))
 
 	host := env("HOST", "127.0.0.1")
 	port := env("PORT", "8080")
@@ -79,6 +88,90 @@ func previewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func pdfHandler(extractor ingestion.PDFExtractor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
+		if err := r.ParseMultipartForm(12 << 20); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid PDF upload: "+err.Error())
+			return
+		}
+
+		var profile ingestion.SourceProfile
+		if err := json.Unmarshal([]byte(r.FormValue("profile")), &profile); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid profile: "+err.Error())
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "PDF file is required")
+			return
+		}
+		defer file.Close()
+
+		if !strings.EqualFold(filepath.Ext(header.Filename), ".pdf") {
+			writeError(w, http.StatusBadRequest, "only PDF uploads are supported by this endpoint")
+			return
+		}
+
+		tempFile, err := os.CreateTemp("", "ai-tutor-upload-*.pdf")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "create temporary PDF: "+err.Error())
+			return
+		}
+		tempPath := tempFile.Name()
+		defer os.Remove(tempPath)
+
+		if _, err := io.Copy(tempFile, file); err != nil {
+			tempFile.Close()
+			writeError(w, http.StatusInternalServerError, "store uploaded PDF: "+err.Error())
+			return
+		}
+		if err := tempFile.Close(); err != nil {
+			writeError(w, http.StatusInternalServerError, "close uploaded PDF: "+err.Error())
+			return
+		}
+
+		extracted, err := extractor.Extract(r.Context(), tempPath)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+
+		resp, err := ingestion.Preview(ingestion.PreviewRequest{
+			Profile: profile,
+			Pages:   extracted.Pages,
+		})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("parse extracted PDF text: %v", err))
+			return
+		}
+
+		if extracted.Summary.OCRPages > 0 {
+			resp.Issues = append(resp.Issues, ingestion.QualityIssue{
+				Severity: "warn",
+				Code:     "ocr_review_required",
+				Message:  "部分页面由 OCR 识别，数学公式和题号切分可能失真，请人工复核后保存图谱。",
+			})
+		}
+		if extracted.Summary.BlankPages > 0 {
+			resp.Issues = append(resp.Issues, ingestion.QualityIssue{
+				Severity: "warn",
+				Code:     "blank_pages",
+				Message:  fmt.Sprintf("%d 页未提取到可读文本，请检查原始 PDF 或更换解析引擎。", extracted.Summary.BlankPages),
+			})
+		}
+		resp.Metrics.IssueCount = len(resp.Issues)
+
+		writeJSON(w, http.StatusOK, ingestion.PDFIngestionResponse{
+			Profile:    profile,
+			Pages:      extracted.Pages,
+			Extraction: extracted.Summary,
+			Preview:    resp,
+		})
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
