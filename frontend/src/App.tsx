@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Background,
   Controls,
@@ -181,6 +181,7 @@ function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const taxonomyById = useMemo(() => {
     const map = new Map<string, TaxonomyNode>();
@@ -258,6 +259,71 @@ function App() {
     }
   }
 
+  async function importSourceFile(file: File) {
+    setError('');
+    const text = await file.text();
+    const lowerName = file.name.toLowerCase();
+
+    if (lowerName.endsWith('.pdf')) {
+      setError('PDF 上传入口已接上，但 PDF parser adapter 还没接入。当前可导入 .json 或 .txt 来验证工作流。');
+      return;
+    }
+
+    if (lowerName.endsWith('.json')) {
+      try {
+        const payload = JSON.parse(text);
+        if (payload.profile || payload.pages) {
+          if (payload.profile) {
+            setProfileText(JSON.stringify(payload.profile, null, 2));
+          }
+          if (payload.pages) {
+            setPagesText(JSON.stringify(payload.pages, null, 2));
+          }
+          return;
+        }
+        if (Array.isArray(payload)) {
+          setPagesText(JSON.stringify(payload, null, 2));
+          return;
+        }
+        throw new Error('JSON 需要是 PreviewRequest 或 PageText[]。');
+      } catch (err) {
+        setError(`JSON 导入失败：${messageOf(err)}`);
+        return;
+      }
+    }
+
+    setPagesText(
+      JSON.stringify(
+        [
+          {
+            page: 1,
+            text,
+          },
+        ],
+        null,
+        2,
+      ),
+    );
+  }
+
+  function saveDraft() {
+    if (!preview) {
+      setError('当前没有可保存的解析结果，请先运行解析。');
+      return;
+    }
+    const payload = {
+      savedAt: new Date().toISOString(),
+      sourceId: preview.sourceId,
+      title: preview.title,
+      preview,
+      graph: {
+        nodes,
+        edges,
+      },
+    };
+    downloadJSON(`${preview.sourceId || 'course'}-graph-draft.json`, payload);
+  }
+
   function applyPreview(nextPreview: PreviewResponse) {
     setPreview(nextPreview);
     const graph = buildGraph(nextPreview);
@@ -303,6 +369,20 @@ function App() {
       </aside>
 
       <section className="module-shell">
+        <input
+          ref={fileInputRef}
+          className="hidden-input"
+          type="file"
+          accept=".json,.txt,.md,.pdf"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void importSourceFile(file);
+            }
+            event.target.value = '';
+          }}
+        />
+
         <header className="app-chrome">
         <div className="brand">
           <div className="brand-mark">
@@ -328,15 +408,15 @@ function App() {
             <RefreshCw size={15} />
             样例
           </button>
-          <button className="secondary-action">
+          <button className="secondary-action" onClick={() => fileInputRef.current?.click()}>
             <Upload size={15} />
-            上传
+            导入
           </button>
           <button onClick={runPreview} disabled={loading}>
             <Play size={15} />
             {loading ? '解析中' : '解析'}
           </button>
-          <button className="primary-dark">
+          <button className="primary-dark" onClick={saveDraft}>
             <Save size={15} />
             保存
           </button>
@@ -369,6 +449,7 @@ function App() {
               pagesText={pagesText}
               onProfileChange={setProfileText}
               onPagesChange={setPagesText}
+              onUpload={() => fileInputRef.current?.click()}
             />
           )}
 
@@ -458,12 +539,14 @@ function ImportView({
   pagesText,
   onProfileChange,
   onPagesChange,
+  onUpload,
 }: {
   preview: PreviewResponse | null;
   profileText: string;
   pagesText: string;
   onProfileChange: (value: string) => void;
   onPagesChange: (value: string) => void;
+  onUpload: () => void;
 }) {
   return (
     <div className="tab-view import-view">
@@ -476,9 +559,9 @@ function ImportView({
       <div className="import-grid">
         <div className="drop-zone">
           <Upload size={26} />
-          <strong>Upload PDF</strong>
-          <p>PDF upload is the next adapter. This draft uses parsed page text to validate the workflow.</p>
-          <button>选择文件</button>
+          <strong>Import source file</strong>
+          <p>导入 .json/.txt 可直接解析；PDF 入口会提示 adapter 未接入，避免假装可用。</p>
+          <button onClick={onUpload}>选择文件</button>
         </div>
 
         <div className="quality-panel">
@@ -904,6 +987,20 @@ function buildGraph(preview: PreviewResponse): { nodes: Node<GraphNodeData>[]; e
 
 function messageOf(err: unknown) {
   return err instanceof Error ? err.message : String(err);
+}
+
+function downloadJSON(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default App;

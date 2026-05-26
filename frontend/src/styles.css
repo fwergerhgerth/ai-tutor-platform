@@ -26,6 +26,10 @@ button {
   border: 0;
 }
 
+.hidden-input {
+  display: none;
+}
+
 .app-root {
   min-height: 100vh;
   display: grid;
