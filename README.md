@@ -1,16 +1,16 @@
 # AI Tutor Platform
 
-AI Tutor Platform 是一个面向学习场景的全栈项目骨架。当前第一个模块是 **教材/讲义导入**：将课程资料中的章节结构、题号规则和区块标记配置成 source profile，并把上游 PDF 解析出的页文本转成课程标签体系与题目挂接预览。
+AI Tutor Platform 是一个面向学习场景的全栈项目骨架。当前第一个模块是 **教材/讲义导入**：将课程资料中的章节结构、题号规则和区块标记配置成 source profile，并把 PDF 中抽取出的页文本转成课程标签体系与题目挂接预览。
 
 ## Module 1: Course Ingestion
 
 当前模块先解决三个问题：
 
 - 用 `source profile` 描述不同教材/讲义的章节标题、题号格式、区块标记和页码偏移。
-- 将 PDF 文本页解析为 `taxonomy`、`problem spans` 和初始 `labelIds`。
+- 浏览器端使用 PDF.js 抽取带文字层 PDF 的逐页文本，并将其解析为 `taxonomy`、`problem spans` 和初始 `labelIds`。
 - 对未挂接题目、乱码数学符号、缺失章节等情况输出质量检查结果。
 
-这个模块不声称能解析任意 PDF。它采用“通用解析器 + 资料配置”的方式，后续可以接入 PyMuPDF、Marker、MinerU 或 OCR 服务作为 PDF 文本抽取层。
+这个模块不声称能解析任意 PDF。当前可直接导入带文字层的 PDF；扫描版、复杂公式 OCR 或版面质量差的资料仍需要后续接入 PaddleOCR、Marker、MinerU 等补充解析能力。
 
 ## Project Layout
 
@@ -100,6 +100,6 @@ VITE_API_BASE=http://127.0.0.1:19091 npm run dev
 
 ## Next Steps
 
-- 接入真实 PDF extraction adapter，将 PyMuPDF/Marker/MinerU 的输出统一成 `PageText[]`。
+- 为扫描版 PDF 接入 OCR adapter，并将 PaddleOCR/Marker/MinerU 的输出统一成 `PageText[]`。
 - 将 `taxonomy` 持久化为课程标签体系，将 `problem spans` 持久化为题库导入记录。
 - 增加 LLM closed-set tagging，把扩充题库映射到已有课程标签体系。

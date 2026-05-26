@@ -10,10 +10,10 @@ func SampleRequest() PreviewRequest {
 				`^第[一二三四五六七八九十]+章`,
 			},
 			SectionPatterns: []string{
-				`^§\d+\.\d+\s+`,
+				`^§\s*\d+\.\d+\s+`,
 			},
 			ProblemPatterns: []string{
-				`^\(\d+\)`,
+				`^\(\s*\d+\s*\)`,
 			},
 			BlockMarkers: map[string]string{
 				"ten_year_exam":    "十年真题",

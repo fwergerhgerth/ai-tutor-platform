@@ -198,10 +198,10 @@ func withDefaults(profile SourceProfile) SourceProfile {
 		profile.ChapterPatterns = []string{`^第[一二三四五六七八九十0-9]+章`}
 	}
 	if len(profile.SectionPatterns) == 0 {
-		profile.SectionPatterns = []string{`^§\d+(\.\d+)*\s+`, `^第[一二三四五六七八九十0-9]+讲`}
+		profile.SectionPatterns = []string{`^§\s*\d+(\.\d+)*\s+`, `^第[一二三四五六七八九十0-9]+讲`}
 	}
 	if len(profile.ProblemPatterns) == 0 {
-		profile.ProblemPatterns = []string{`^\(?\d+\)?[\.、)]?`}
+		profile.ProblemPatterns = []string{`^\(\s*\d+\s*\)`, `^\d+[\.、]`}
 	}
 	if profile.BlockMarkers == nil {
 		profile.BlockMarkers = map[string]string{}

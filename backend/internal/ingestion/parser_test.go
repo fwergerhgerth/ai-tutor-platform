@@ -31,3 +31,27 @@ func TestPreviewReportsMissingPatterns(t *testing.T) {
 		t.Fatal("expected invalid regexp error")
 	}
 }
+
+func TestPreviewHandlesSpacedPDFTextTokens(t *testing.T) {
+	req := PreviewRequest{
+		Profile: SourceProfile{SourceID: "pdfjs-source", Title: "PDF.js extracted lecture"},
+		Pages: []PageText{{
+			Page: 80,
+			Text: "第三章 一元函数积分学\n§ 3.2   不定积分、定积分与反常积分的计算\n( 1 ) 计算含根式结构的定积分。",
+		}},
+	}
+
+	resp, err := Preview(req)
+	if err != nil {
+		t.Fatalf("Preview returned error: %v", err)
+	}
+	if resp.Metrics.TaxonomyCount != 2 {
+		t.Fatalf("taxonomy count = %d, want 2", resp.Metrics.TaxonomyCount)
+	}
+	if resp.Metrics.ProblemCount != 1 {
+		t.Fatalf("problem count = %d, want 1", resp.Metrics.ProblemCount)
+	}
+	if resp.Problems[0].SectionID == "" {
+		t.Fatal("spaced PDF exercise was not attached to section")
+	}
+}
